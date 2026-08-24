@@ -1,0 +1,101 @@
+name: Deploy to SproutOS
+description: Upload a built application to SproutOS and release it.
+author: SproutOS
+
+# A composite action, not JavaScript and not Docker.
+#
+# JavaScript would mean committing `node_modules` or a bundler step, and shipping a bundle whose
+# provenance a customer cannot read. Docker would mean pulling an image on every run, which is
+# slower than everything this action actually does. Composite is shell in the open — a customer can
+# read exactly what runs in their repository, which matters for an action that holds a token.
+
+branding:
+  icon: upload-cloud
+  color: green
+
+inputs:
+  preset:
+    description: >-
+      What was built: next, hono, android, or static. Decides which files are collected and how the
+      platform runs them.
+    required: true
+  directory:
+    description: >-
+      Where the build output is. Defaults to the preset's conventional location, so most callers do
+      not set it.
+    required: false
+    default: ""
+  project:
+    description: The SproutOS project slug. Defaults to the repository name.
+    required: false
+    default: ""
+  environment:
+    description: production, preview, or development.
+    required: false
+    default: production
+  api-url:
+    description: The SproutOS API. Override only for a self-hosted or staging platform.
+    required: false
+    default: https://api.sproutos.me
+  token:
+    description: >-
+      A SproutOS deploy token. **Leave this unset.** Without it the action authenticates with GitHub
+      OIDC, which issues a short-lived token scoped to this repository and this workflow run — a
+      secret that cannot leak because it is never stored. Set it only where OIDC is unavailable.
+    required: false
+    default: ""
+
+outputs:
+  url:
+    description: Where the deployment is reachable.
+    value: ${{ steps.release.outputs.url }}
+  deployment-id:
+    description: The SproutOS deployment id, for polling or rollback.
+    value: ${{ steps.release.outputs.deployment-id }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve the preset
+      id: preset
+      shell: bash
+      env:
+        PRESET: ${{ inputs.preset }}
+        DIRECTORY: ${{ inputs.directory }}
+      run: ${{ github.action_path }}/scripts/resolve-preset.sh
+
+    - name: Authenticate
+      id: auth
+      shell: bash
+      env:
+        API_URL: ${{ inputs.api-url }}
+        SUPPLIED_TOKEN: ${{ inputs.token }}
+        # Provided by GitHub when the workflow requests `id-token: write`. The action cannot request
+        # that permission for the caller — a workflow grants its own — so the failure when it is
+        # missing has to name the fix, which `authenticate.sh` does.
+        ACTIONS_ID_TOKEN_REQUEST_URL: ${{ env.ACTIONS_ID_TOKEN_REQUEST_URL }}
+        ACTIONS_ID_TOKEN_REQUEST_TOKEN: ${{ env.ACTIONS_ID_TOKEN_REQUEST_TOKEN }}
+      run: ${{ github.action_path }}/scripts/authenticate.sh
+
+    - name: Package
+      id: package
+      shell: bash
+      env:
+        DIRECTORY: ${{ steps.preset.outputs.directory }}
+        PRESET: ${{ steps.preset.outputs.preset }}
+      run: ${{ github.action_path }}/scripts/package.sh
+
+    - name: Upload and release
+      id: release
+      shell: bash
+      env:
+        API_URL: ${{ inputs.api-url }}
+        SPROUTOS_TOKEN: ${{ steps.auth.outputs.token }}
+        ARCHIVE: ${{ steps.package.outputs.archive }}
+        DIGEST: ${{ steps.package.outputs.digest }}
+        PRESET: ${{ steps.preset.outputs.preset }}
+        PROJECT: ${{ inputs.project || github.event.repository.name }}
+        ENVIRONMENT: ${{ inputs.environment }}
+        COMMIT: ${{ github.sha }}
+        REF: ${{ github.ref_name }}
+      run: ${{ github.action_path }}/scripts/release.sh
