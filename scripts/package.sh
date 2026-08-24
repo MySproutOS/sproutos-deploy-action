@@ -3,32 +3,30 @@
 # Collect the build output into one archive, and record its digest.
 set -euo pipefail
 
-archive="${RUNNER_TEMP}/sproutos-deploy.tar.gz"
+archive="${RUNNER_TEMP}/sproutos-deploy.zip"
 
-# GNU tar, explicitly checked.
+# Zip, not tar.gz.
 #
-# The reproducibility below needs `--sort` and `--mtime`, which BSD tar does not have — so on macOS
-# this fails with "Option --sort=name is not supported", `set -e` aborts, and any check that reads
-# the digest afterwards compares two empty strings and calls them equal. That happened. GitHub
-# runners have GNU tar; a laptop may not, and being told which is the difference between a skipped
-# test and a green one that tested nothing.
-if tar --version 2>/dev/null | head -1 | grep -q 'GNU tar'; then
-  TAR=tar
-elif command -v gtar >/dev/null 2>&1; then
-  TAR=gtar
-else
-  echo "::error::GNU tar is required (BSD tar has no --sort/--mtime, so archives would not be reproducible)." >&2
-  echo "::error::On macOS: brew install gnu-tar" >&2
+# Lambda reads a zip and nothing else — `S3Key` pointing at a tarball fails with
+# "Unzipped size must be smaller than…", which says nothing about the format being wrong. The
+# android preset uses the same format because one archive format is simpler than two and `unzip` is
+# as available as `tar` on any machine that can sign an APK.
+if ! command -v zip >/dev/null 2>&1; then
+  echo "::error::zip is required. On Debian/Ubuntu: apt-get install zip" >&2
   exit 1
 fi
 
-# `--sort=name` and a fixed mtime make the archive reproducible: the same tree produces the same
-# bytes and the same digest, so a redeploy of an unchanged build is visibly a no-op rather than
-# looking like a new artifact every time.
-"$TAR" --sort=name \
-    --mtime='UTC 2020-01-01' \
-    --owner=0 --group=0 --numeric-owner \
-    -czf "$archive" -C "$DIRECTORY" .
+cd "$DIRECTORY"
+
+# Reproducible: the same tree produces the same bytes and the same digest, so a redeploy of an
+# unchanged build is visibly a no-op rather than looking like a new artifact every time.
+#
+# Zip has no `--sort`, so the file list is sorted and fed in explicitly — zip otherwise stores
+# entries in readdir order, which differs between filesystems. And every entry's mtime is pinned,
+# because zip records timestamps with no option to omit them; without this the digest changes on
+# every checkout even when nothing in the tree did.
+find . -exec touch -t 202001010000.00 {} +
+find . -type f -o -type l | LC_ALL=C sort | zip -X -q -@ "$archive"
 
 digest=$(shasum -a 256 "$archive" | cut -d' ' -f1)
 size=$(wc -c < "$archive" | tr -d ' ')

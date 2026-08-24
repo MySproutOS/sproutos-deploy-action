@@ -62,6 +62,11 @@ here than by AWS several minutes later, in a message about a deployment package.
 
 ## Reproducible archives
 
-`tar` runs with a fixed mtime and sorted names, so the same tree produces the same bytes and the
-same digest. A redeploy of an unchanged build is then visibly a no-op, rather than looking like a
-new artifact every time.
+The output is a **zip**, because that is what Lambda reads. Every preset uses the same format —
+`unzip` is as available as `tar` on any machine that needs one, and two archive formats is one more
+than the platform has a reason for.
+
+Zip has no `--sort` and no way to omit timestamps, so the file list is sorted explicitly and every
+entry's mtime is pinned before archiving. The same tree then produces the same bytes and the same
+digest, and a redeploy of an unchanged build is visibly a no-op rather than looking like a new
+artifact every time.
