@@ -37,6 +37,23 @@ inputs:
     description: The SproutOS API. Override only for a self-hosted or staging platform.
     required: false
     default: https://api.sproutos.me
+  static-paths:
+    description: >-
+      Directories of static assets to publish to the CDN instead of shipping inside the function,
+      one per line, as `source` or `source:url-prefix`.
+
+      Most callers leave this unset: each preset has a default that is correct for it. Set it to add
+      a directory the preset does not know about, and set it to `none` to publish nothing.
+
+      Plural because a real build has more than one — a Next.js app has hashed chunks under
+      `.next/static` and hand-written files under `public/`, which land at different URLs and cannot
+      be expressed as a single path.
+
+      Assets published this way are served from the shared tenant bucket through the CDN, so they
+      do not count against the function's 200 MB archive limit and are not re-downloaded by every
+      cold start.
+    required: false
+    default: ""
   token:
     description: >-
       A SproutOS deploy token. **Leave this unset.** Without it the action authenticates with GitHub
@@ -62,6 +79,7 @@ runs:
       env:
         PRESET: ${{ inputs.preset }}
         DIRECTORY: ${{ inputs.directory }}
+        STATIC_PATHS: ${{ inputs.static-paths }}
       run: ${{ github.action_path }}/scripts/resolve-preset.sh
 
     - name: Authenticate
@@ -85,10 +103,19 @@ runs:
         PRESET: ${{ steps.preset.outputs.preset }}
       run: ${{ github.action_path }}/scripts/package.sh
 
+    - name: Package the static assets
+      id: static
+      shell: bash
+      env:
+        STATIC_PATHS: ${{ steps.preset.outputs.static-paths }}
+      run: ${{ github.action_path }}/scripts/package-static.sh
+
     - name: Upload and release
       id: release
       shell: bash
       env:
+        STATIC_ARCHIVE: ${{ steps.static.outputs.static-archive }}
+        STATIC_DIGEST: ${{ steps.static.outputs.static-digest }}
         API_URL: ${{ inputs.api-url }}
         SPROUTOS_TOKEN: ${{ steps.auth.outputs.token }}
         ARCHIVE: ${{ steps.package.outputs.archive }}

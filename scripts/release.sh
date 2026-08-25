@@ -15,13 +15,35 @@ upload=$(curl -sSf -X POST "${API_URL}/v1/deploy/upload-url" \
 url=$(echo "$upload" | python3 -c 'import sys,json;print(json.load(sys.stdin)["url"])')
 key=$(echo "$upload" | python3 -c 'import sys,json;print(json.load(sys.stdin)["key"])')
 
-curl -sSf -X PUT "$url" --upload-file "$ARCHIVE" -H 'Content-Type: application/gzip' > /dev/null
+curl -sSf -X PUT "$url" --upload-file "$ARCHIVE" -H 'Content-Type: application/zip' > /dev/null
 echo "uploaded"
+
+# The assets, if the build produced any, on their own pre-signed URL into the shared tenant bucket.
+#
+# Uploaded *before* the release call and named in it, the same order and for the same reason as the
+# application archive: a release that referenced assets not yet uploaded would publish a version
+# whose stylesheets 404 for as long as the upload took.
+static_field=""
+if [ -n "${STATIC_ARCHIVE:-}" ] && [ -f "${STATIC_ARCHIVE}" ]; then
+  static_upload=$(curl -sSf -X POST "${API_URL}/v1/deploy/static-upload-url" \
+    -H "Authorization: Bearer ${SPROUTOS_TOKEN}" \
+    -H 'Content-Type: application/json' \
+    -d "{\"digest\":\"${STATIC_DIGEST}\"}")
+
+  static_url=$(echo "$static_upload" | python3 -c 'import sys,json;print(json.load(sys.stdin)["url"])')
+  static_key=$(echo "$static_upload" | python3 -c 'import sys,json;print(json.load(sys.stdin)["key"])')
+
+  curl -sSf -X PUT "$static_url" --upload-file "$STATIC_ARCHIVE" \
+    -H 'Content-Type: application/zip' > /dev/null
+
+  static_field=",\"static_key\":\"${static_key}\",\"static_digest\":\"${STATIC_DIGEST}\""
+  echo "uploaded assets"
+fi
 
 released=$(curl -sSf -X POST "${API_URL}/v1/deploy/release" \
   -H "Authorization: Bearer ${SPROUTOS_TOKEN}" \
   -H 'Content-Type: application/json' \
-  -d "{\"project\":\"${PROJECT}\",\"key\":\"${key}\",\"digest\":\"${DIGEST}\",\"preset\":\"${PRESET}\",\"environment\":\"${ENVIRONMENT}\",\"commit\":\"${COMMIT}\",\"ref\":\"${REF}\"}")
+  -d "{\"project\":\"${PROJECT}\",\"key\":\"${key}\",\"digest\":\"${DIGEST}\",\"preset\":\"${PRESET}\",\"environment\":\"${ENVIRONMENT}\",\"commit\":\"${COMMIT}\",\"ref\":\"${REF}\"${static_field}}")
 
 deployment_id=$(echo "$released" | python3 -c 'import sys,json;print(json.load(sys.stdin)["deployment_id"])')
 deploy_url=$(echo "$released" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("url",""))')
