@@ -40,7 +40,7 @@ case "$PRESET" in
     # the root has nothing, and refused when it is ambiguous: picking one of two servers would
     # deploy the wrong application and look like a working deploy.
     if [ -z "$entry" ]; then
-      matches=$(find . -name server.js -not -path './node_modules/*' | LC_ALL=C sort)
+      matches=$(find . -name server.js -not -path '*/node_modules/*' | LC_ALL=C sort)
       count=$(printf '%s' "$matches" | grep -c . || true)
       if [ "$count" -eq 1 ]; then
         entry="${matches#./}"
