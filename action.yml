@@ -26,7 +26,13 @@ inputs:
     required: false
     default: ""
   project:
-    description: The SproutOS project slug. Defaults to the repository name.
+    description: >-
+      The SproutOS project slug. Defaults to the repository name.
+
+      **Required when the repository holds more than one project** — a monorepo deploying a web app
+      and an API separately, or any repository whose projects sit under a group. The platform
+      refuses to guess: picking one would deploy the right code onto the wrong service, which looks
+      exactly like success.
     required: false
     default: ""
   environment:
@@ -37,6 +43,30 @@ inputs:
     description: The SproutOS API. Override only for a self-hosted or staging platform.
     required: false
     default: https://api.sproutos.me
+  runtime:
+    description: >-
+      The Lambda runtime to publish on, e.g. `nodejs22.x`. Defaults to the preset's, so most callers
+      do not set it. Set it to pin a version rather than follow the platform default.
+    required: false
+    default: ""
+  handler:
+    description: The function entry point, e.g. `index.handler`. Defaults to the preset's.
+    required: false
+    default: ""
+  migration-directory:
+    description: >-
+      A built database migrator. When set, it is uploaded alongside the application and run **before**
+      the new version takes traffic — a failed migration fails the deploy and leaves the previous
+      release serving.
+
+      Unset means this project has no migration step, which is recorded as `skipped` rather than as
+      nothing, so "no migrations" and "somebody forgot" do not look the same.
+    required: false
+    default: ""
+  migration-handler:
+    description: The migrator's entry point. Defaults to the application's handler.
+    required: false
+    default: ""
   static-paths:
     description: >-
       Directories of static assets to publish to the CDN instead of shipping inside the function,
@@ -49,9 +79,14 @@ inputs:
       `.next/static` and hand-written files under `public/`, which land at different URLs and cannot
       be expressed as a single path.
 
-      Assets published this way are served from the shared tenant bucket through the CDN, so they
-      do not count against the function's 200 MB archive limit and are not re-downloaded by every
-      cold start.
+      Assets published this way are served from a **platform-managed** bucket through the CDN, so
+      they do not count against the function's 200 MB archive limit and are not re-downloaded by
+      every cold start.
+
+      That bucket is not your project's object-storage service. It is shared across tenants and
+      keyed by project — the key prefix is the boundary — and it holds build output only. Files your
+      application uploads at runtime belong in the `object_storage` service you provision, which has
+      its own credentials and its own lifecycle. Nothing here writes to that.
     required: false
     default: ""
   token:
@@ -93,6 +128,10 @@ runs:
         # missing has to name the fix, which `authenticate.sh` does.
         ACTIONS_ID_TOKEN_REQUEST_URL: ${{ env.ACTIONS_ID_TOKEN_REQUEST_URL }}
         ACTIONS_ID_TOKEN_REQUEST_TOKEN: ${{ env.ACTIONS_ID_TOKEN_REQUEST_TOKEN }}
+        # Which project in this repository. The token is minted for it, and every later call reads
+        # the project from the token — so naming it here is what stops a monorepo's API deploy
+        # landing on its website.
+        PROJECT: ${{ inputs.project || github.event.repository.name }}
       run: ${{ github.action_path }}/scripts/authenticate.sh
 
     - name: Package
@@ -102,6 +141,13 @@ runs:
         DIRECTORY: ${{ steps.preset.outputs.directory }}
         PRESET: ${{ steps.preset.outputs.preset }}
       run: ${{ github.action_path }}/scripts/package.sh
+
+    - name: Package the migrator
+      id: migration
+      shell: bash
+      env:
+        MIGRATION_DIRECTORY: ${{ inputs.migration-directory }}
+      run: ${{ github.action_path }}/scripts/package-migration.sh
 
     - name: Package the static assets
       id: static
@@ -125,4 +171,12 @@ runs:
         ENVIRONMENT: ${{ inputs.environment }}
         COMMIT: ${{ github.sha }}
         REF: ${{ github.ref_name }}
+        # The commit subject, so a deployment list reads like a history rather than a column of
+        # shas. Trimmed to one line here because a body would break the JSON payload.
+        MESSAGE: ${{ github.event.head_commit.message }}
+        RUNTIME: ${{ inputs.runtime }}
+        HANDLER: ${{ inputs.handler }}
+        MIGRATION_ARCHIVE: ${{ steps.migration.outputs.migration-archive }}
+        MIGRATION_DIGEST: ${{ steps.migration.outputs.migration-digest }}
+        MIGRATION_HANDLER: ${{ inputs.migration-handler }}
       run: ${{ github.action_path }}/scripts/release.sh

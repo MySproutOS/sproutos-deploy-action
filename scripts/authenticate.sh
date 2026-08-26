@@ -30,9 +30,45 @@ fi
 oidc=$(curl -sSf -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
   "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sproutos" | python3 -c 'import sys,json;print(json.load(sys.stdin)["value"])')
 
-exchanged=$(curl -sSf -X POST "${API_URL}/v1/deploy/token" \
-  -H 'Content-Type: application/json' \
-  -d "{\"oidc_token\":\"${oidc}\"}" | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')
+# The project travels with the exchange, not just with the release.
+#
+# The token is scoped to one project and every later call reads the project *from the token*, so a
+# repository holding more than one has to say which at this point or not at all. The platform
+# refuses to guess rather than picking one: a wrong pick is a successful deploy onto the wrong
+# service, and nothing downstream could notice.
+payload=$(PROJECT="${PROJECT:-}" OIDC="$oidc" python3 -c '
+import json, os
+body = {"oidc_token": os.environ["OIDC"]}
+project = os.environ.get("PROJECT", "").strip()
+if project:
+    body["project"] = project
+print(json.dumps(body))
+')
+
+# No `-f`, deliberately.
+#
+# `curl -f` throws the response body away on an error status, which is exactly the body worth
+# reading here: an ambiguous repository lists its candidate projects, and naming a group says so by
+# name. With `-f` the customer gets `exit 22` and nothing to act on.
+response=$(curl -sS -w '\n%{http_code}' -X POST "${API_URL}/v1/deploy/token" \
+  -H 'Content-Type: application/json' -d "$payload")
+status=$(printf '%s' "$response" | tail -n1)
+body=$(printf '%s' "$response" | sed '$d')
+
+if [ "$status" != "200" ]; then
+  echo "::error::SproutOS refused the deploy token (HTTP $status)." >&2
+  printf '%s\n' "$body" | python3 -c '
+import json, sys
+raw = sys.stdin.read()
+try:
+    print(json.loads(raw).get("message", raw))
+except Exception:
+    print(raw)
+' | sed 's/^/::error::/' >&2
+  exit 1
+fi
+
+exchanged=$(printf '%s' "$body" | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')
 
 # Masked so it cannot appear in a log, including one printed by a later step's `set -x`.
 echo "::add-mask::$exchanged"
