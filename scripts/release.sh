@@ -7,10 +7,36 @@
 # carries the digest, which is what lets the platform refuse an upload that did not arrive intact.
 set -euo pipefail
 
-upload=$(curl -sSf -X POST "${API_URL}/v1/deploy/upload-url" \
-  -H "Authorization: Bearer ${SPROUTOS_TOKEN}" \
-  -H 'Content-Type: application/json' \
-  -d "{\"project\":\"${PROJECT}\",\"digest\":\"${DIGEST}\",\"preset\":\"${PRESET}\"}")
+# One place that calls the API and says what happened when it goes wrong.
+#
+# Every call here was `curl -sSf`, which on a failure prints `curl: (22) The requested URL returned
+# error: 404` and discards the body. The body is where the platform explains itself — "no project
+# named X in this repository", "that project is a group" — and `-f` threw it away, leaving a customer
+# with a bare status code and no route to the cause. That is the same failure this repository keeps
+# writing findings about: a check that fires and says nothing.
+api() {
+  local url="$1" payload="$2"
+  local out status response
+  # `-d` is always passed, never built into a conditional expansion: an unquoted `${x:+-d "$x"}`
+  # word-splits on the spaces `json.dumps` puts after every comma, which would send a fragment of
+  # the payload and produce a validation error about a field the caller did send.
+  out=$(curl -sS -X POST "$url" \
+    -H "Authorization: Bearer ${SPROUTOS_TOKEN}" \
+    -H 'Content-Type: application/json' \
+    -d "$payload" \
+    -w '\n%{http_code}')
+  status=$(printf '%s' "$out" | tail -n1)
+  response=$(printf '%s' "$out" | sed '$d')
+  if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+    echo "::error::POST ${url} returned ${status}" >&2
+    echo "::error::${response}" >&2
+    return 1
+  fi
+  printf '%s' "$response"
+}
+
+upload=$(api "${API_URL}/v1/deploy/upload-url" \
+  "{\"project\":\"${PROJECT}\",\"digest\":\"${DIGEST}\",\"preset\":\"${PRESET}\"}")
 
 url=$(echo "$upload" | python3 -c 'import sys,json;print(json.load(sys.stdin)["url"])')
 key=$(echo "$upload" | python3 -c 'import sys,json;print(json.load(sys.stdin)["key"])')
@@ -25,10 +51,8 @@ echo "uploaded"
 # whose stylesheets 404 for as long as the upload took.
 static_field=""
 if [ -n "${STATIC_ARCHIVE:-}" ] && [ -f "${STATIC_ARCHIVE}" ]; then
-  static_upload=$(curl -sSf -X POST "${API_URL}/v1/deploy/static-upload-url" \
-    -H "Authorization: Bearer ${SPROUTOS_TOKEN}" \
-    -H 'Content-Type: application/json' \
-    -d "{\"digest\":\"${STATIC_DIGEST}\"}")
+  static_upload=$(api "${API_URL}/v1/deploy/static-upload-url" \
+    "{\"digest\":\"${STATIC_DIGEST}\"}")
 
   static_url=$(echo "$static_upload" | python3 -c 'import sys,json;print(json.load(sys.stdin)["url"])')
   static_key=$(echo "$static_upload" | python3 -c 'import sys,json;print(json.load(sys.stdin)["key"])')
@@ -46,10 +70,8 @@ fi
 # migration key that has not landed would queue a job whose first act is to fail.
 migration_field=""
 if [ -n "${MIGRATION_ARCHIVE:-}" ] && [ -f "${MIGRATION_ARCHIVE}" ]; then
-  migration_upload=$(curl -sSf -X POST "${API_URL}/v1/deploy/upload-url" \
-    -H "Authorization: Bearer ${SPROUTOS_TOKEN}" \
-    -H 'Content-Type: application/json' \
-    -d "{\"project\":\"${PROJECT}\",\"digest\":\"${MIGRATION_DIGEST}\",\"preset\":\"${PRESET}\"}")
+  migration_upload=$(api "${API_URL}/v1/deploy/upload-url" \
+    "{\"project\":\"${PROJECT}\",\"digest\":\"${MIGRATION_DIGEST}\",\"preset\":\"${PRESET}\"}")
 
   migration_url=$(echo "$migration_upload" | python3 -c 'import sys,json;print(json.load(sys.stdin)["url"])')
   migration_key=$(echo "$migration_upload" | python3 -c 'import sys,json;print(json.load(sys.stdin)["key"])')
@@ -104,10 +126,7 @@ print(json.dumps(body))
 '
 )
 
-released=$(curl -sSf -X POST "${API_URL}/v1/deploy/release" \
-  -H "Authorization: Bearer ${SPROUTOS_TOKEN}" \
-  -H 'Content-Type: application/json' \
-  -d "$body")
+released=$(api "${API_URL}/v1/deploy/release" "$body")
 
 deployment_id=$(echo "$released" | python3 -c 'import sys,json;print(json.load(sys.stdin)["deployment_id"])')
 deploy_url=$(echo "$released" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("url",""))')
