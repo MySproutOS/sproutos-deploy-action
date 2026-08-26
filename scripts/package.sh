@@ -98,44 +98,32 @@ esac
 # entries in readdir order, which differs between filesystems. And every entry's mtime is pinned,
 # because zip records timestamps with no option to omit them; without this the digest changes on
 # every checkout even when nothing in the tree did.
-# `-L`, and this is the difference between a working deploy and a 234 KB archive.
+# Symlinks are stored as symlinks, and that is the whole trick.
 #
-# A pnpm workspace links dependencies rather than copying them, so Next's standalone tree contains
-# `node_modules/next` as a **symlink to a directory**. `find . -type f` does not descend into one,
-# and `find . -type l` lists the link itself — which zip stores as a single entry with nothing
-# inside. The archive builds, uploads and publishes, and the function dies on
-# `Cannot find module 'next'` from a tree that visibly contains it.
+# A pnpm workspace does not copy dependencies, it links them: the real files live under
+# `node_modules/.pnpm/<name>@<version>/node_modules/<name>`, and every place that depends on one
+# holds a symlink to it. Next's standalone output reproduces that layout faithfully, `.pnpm` and
+# all.
 #
-# `-L` follows symlinks while descending, so the files inside a linked package are enumerated at the
-# paths the application will look for them.
-find -L . -exec touch -t 202001010000.00 {} + 2>/dev/null || true
-# A broken symlink is not `-type f` under `-L`, so it is excluded here without a second test —
-# `-xtype` would have done it explicitly and does not exist in BSD find, which is how a check like
-# that ends up passing in CI and failing for anyone testing on a Mac.
-find -L . -type f | LC_ALL=C sort | zip -X -q -@ "$archive"
-
-# Compiled native modules built for the wrong machine.
+# Two ways to get this wrong, and this action shipped both:
 #
-# SproutOS publishes customer functions on arm64 — Graviton is cheaper for identical work, and it is
-# the architecture the platform's own Lambda extension is built for. A GitHub `ubuntu-latest` runner
-# is x86-64, so a project with a compiled dependency (`sharp`, `better-sqlite3`, a native `swc`)
-# packages the wrong `.node` file here and fails at runtime with a module-not-found naming a file
-# and not an architecture.
+#   Storing the link as an entry, following it, and descending no further. `find -type f` does not
+#   enter a symlinked directory, so the archive was 234 KB — it published successfully and the
+#   function died on `Cannot find module 'next'` from a tree that visibly contains it.
 #
-# Refused with the list, before the upload. `file` is on every GitHub runner; where it is not, this
-# says so rather than passing silently — a check that quietly does nothing is worse than no check.
-if command -v file >/dev/null 2>&1; then
-  wrong=$(find . -name '*.node' -not -path '*/node_modules/.cache/*' -exec file {} + 2>/dev/null \
-    | grep -E 'x86-64|80386' | cut -d: -f1 || true)
-  if [ -n "$wrong" ]; then
-    echo "::error::This build contains native modules compiled for x86-64. SproutOS runs functions on arm64." >&2
-    echo "$wrong" | head -20 >&2
-    echo "::error::Build on an arm64 runner (runs-on: ubuntu-24.04-arm) so the compiled dependencies match." >&2
-    exit 1
-  fi
-else
-  echo "::warning::'file' is not available, so native modules were not checked against the arm64 runtime." >&2
-fi
+#   Dereferencing with `find -L`. Every file is present, and resolution still fails: flattening
+#   `node_modules/next` into a real directory means Node walking up from it finds
+#   `apps/web/node_modules`, not the `.pnpm` peer directory holding `next`'s own dependencies. The
+#   archive was 54 MB, and the function died on `@swc/helpers/_/_interop_require_default` — a
+#   package that is in the archive, at a path nothing will look in.
+#
+# `zip -y` keeps the links as links. The real files are already inside the tree under `.pnpm`, and
+# Lambda preserves symlinks when it unpacks, so `/var/task` gets the layout pnpm built.
+# `-h` so a symlink's own timestamp is pinned rather than its target's — without it the links keep
+# their real mtimes and the digest changes on every checkout, which is the thing this pinning exists
+# to prevent.
+find . -exec touch -h -t 202001010000.00 {} +
+find . -type f -o -type l | LC_ALL=C sort | zip -X -y -q -@ "$archive"
 
 digest=$(shasum -a 256 "$archive" | cut -d' ' -f1)
 size=$(wc -c < "$archive" | tr -d ' ')
