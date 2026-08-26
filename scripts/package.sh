@@ -101,6 +101,29 @@ esac
 find . -exec touch -t 202001010000.00 {} +
 find . -type f -o -type l | LC_ALL=C sort | zip -X -q -@ "$archive"
 
+# Compiled native modules built for the wrong machine.
+#
+# SproutOS publishes customer functions on arm64 — Graviton is cheaper for identical work, and it is
+# the architecture the platform's own Lambda extension is built for. A GitHub `ubuntu-latest` runner
+# is x86-64, so a project with a compiled dependency (`sharp`, `better-sqlite3`, a native `swc`)
+# packages the wrong `.node` file here and fails at runtime with a module-not-found naming a file
+# and not an architecture.
+#
+# Refused with the list, before the upload. `file` is on every GitHub runner; where it is not, this
+# says so rather than passing silently — a check that quietly does nothing is worse than no check.
+if command -v file >/dev/null 2>&1; then
+  wrong=$(find . -name '*.node' -not -path '*/node_modules/.cache/*' -exec file {} + 2>/dev/null \
+    | grep -E 'x86-64|80386' | cut -d: -f1 || true)
+  if [ -n "$wrong" ]; then
+    echo "::error::This build contains native modules compiled for x86-64. SproutOS runs functions on arm64." >&2
+    echo "$wrong" | head -20 >&2
+    echo "::error::Build on an arm64 runner (runs-on: ubuntu-24.04-arm) so the compiled dependencies match." >&2
+    exit 1
+  fi
+else
+  echo "::warning::'file' is not available, so native modules were not checked against the arm64 runtime." >&2
+fi
+
 digest=$(shasum -a 256 "$archive" | cut -d' ' -f1)
 size=$(wc -c < "$archive" | tr -d ' ')
 
