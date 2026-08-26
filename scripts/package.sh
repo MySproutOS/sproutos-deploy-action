@@ -18,6 +18,51 @@ fi
 
 cd "$DIRECTORY"
 
+# The startup script, for presets that produce a web server rather than a Lambda handler.
+#
+# `next` and `hono` build a program that listens on a port. Lambda cannot invoke that directly, so
+# the platform publishes those functions with the Lambda Web Adapter attached; the adapter starts
+# the server and forwards each invocation to it as an ordinary HTTP request. The adapter's contract
+# is that the function's handler is a script at the archive root, so it has to be written here —
+# the platform never opens the archive.
+#
+# Written into the build output *before* packaging, so the digest covers it: an archive whose
+# entrypoint is not part of what was checksummed is an archive that can change without the digest
+# moving.
+case "$PRESET" in
+  next|hono)
+    entry=""
+    for candidate in server.js index.js index.mjs dist/index.js; do
+      if [ -f "$candidate" ]; then entry="$candidate"; break; fi
+    done
+    # A monorepo's Next standalone tree nests the server under the app's path — `apps/web/server.js`
+    # rather than `server.js` — because standalone mirrors the workspace layout. Searched only when
+    # the root has nothing, and refused when it is ambiguous: picking one of two servers would
+    # deploy the wrong application and look like a working deploy.
+    if [ -z "$entry" ]; then
+      matches=$(find . -name server.js -not -path './node_modules/*' | LC_ALL=C sort)
+      count=$(printf '%s' "$matches" | grep -c . || true)
+      if [ "$count" -eq 1 ]; then
+        entry="${matches#./}"
+      elif [ "$count" -gt 1 ]; then
+        echo "::error::Found $count server.js files in '$DIRECTORY' and cannot tell which to run:" >&2
+        echo "$matches" >&2
+        echo "::error::Set the 'handler' input to the one to start, e.g. handler: apps/web/server.js" >&2
+        exit 1
+      fi
+    fi
+    if [ -z "$entry" ]; then
+      echo "::error::No server entry point found in '$DIRECTORY' for the '$PRESET' preset." >&2
+      echo "::error::Expected server.js, index.js or index.mjs. Set the 'directory' input if the build output is elsewhere." >&2
+      exit 1
+    fi
+    # `exec` so the server replaces the shell and receives Lambda's signals directly.
+    printf '#!/bin/sh\nset -e\nexec node %s\n' "$entry" > run.sh
+    chmod +x run.sh
+    echo "entrypoint: node $entry"
+    ;;
+esac
+
 # Reproducible: the same tree produces the same bytes and the same digest, so a redeploy of an
 # unchanged build is visibly a no-op rather than looking like a new artifact every time.
 #
