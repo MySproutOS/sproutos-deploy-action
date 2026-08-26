@@ -117,13 +117,21 @@ deploy_url=$(echo "$released" | python3 -c 'import sys,json;print(json.load(sys.
   echo "url=$deploy_url"
 } >> "$GITHUB_OUTPUT"
 
-echo "### Deployed to SproutOS" >> "$GITHUB_STEP_SUMMARY"
-echo "" >> "$GITHUB_STEP_SUMMARY"
-echo "| | |" >> "$GITHUB_STEP_SUMMARY"
-echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
-echo "| Project | \`${PROJECT}\` |" >> "$GITHUB_STEP_SUMMARY"
-echo "| Environment | ${ENVIRONMENT} |" >> "$GITHUB_STEP_SUMMARY"
-echo "| Deployment | \`${deployment_id}\` |" >> "$GITHUB_STEP_SUMMARY"
-[ -n "$deploy_url" ] && echo "| URL | ${deploy_url} |" >> "$GITHUB_STEP_SUMMARY"
+# One redirect for the whole summary rather than eight (SC2129), which also means a partial write
+# cannot leave half a table in the job summary.
+{
+  echo "### Deployed to SproutOS"
+  echo ""
+  echo "| | |"
+  echo "| --- | --- |"
+  echo "| Project | \`${PROJECT}\` |"
+  echo "| Environment | ${ENVIRONMENT} |"
+  echo "| Deployment | \`${deployment_id}\` |"
+  [ -n "$deploy_url" ] && echo "| URL | ${deploy_url} |"
+  [ -n "${MIGRATION_ARCHIVE:-}" ] && echo "| Migrations | ran before this release took traffic |"
+  # `true` so the block's exit status is the redirect's, not the last conditional's — a deploy with
+  # no URL yet would otherwise fail the step under `set -e`.
+  true
+} >> "$GITHUB_STEP_SUMMARY"
 
 echo "released $deployment_id"
