@@ -16,6 +16,7 @@ if ! command -v zip >/dev/null 2>&1; then
   exit 1
 fi
 
+workspace=$(pwd)
 cd "$DIRECTORY"
 
 # The startup script, for presets that produce a web server rather than a Lambda handler.
@@ -56,6 +57,33 @@ case "$PRESET" in
       echo "::error::Expected server.js, index.js or index.mjs. Set the 'directory' input if the build output is elsewhere." >&2
       exit 1
     fi
+    # Next's standalone output **excludes** `.next/static` and `public/` — it assumes a CDN serves
+    # them — so a function built from the standalone tree alone answers 200 for every page and 404
+    # for every stylesheet, script and font. The HTML is correct and the site is unstyled, which no
+    # health check and no `curl` of `/` will notice.
+    #
+    # The action already uploads them separately, and the platform accepts a `static_key` it never
+    # reads: nothing unpacks that archive and nothing serves it. Until something does, copying them
+    # in is Next's own documented instruction and needs no CDN at all.
+    #
+    # Into the *server's own directory*, not the tree root: a workspace build nests the server under
+    # the app's path, and it resolves both of these relative to itself.
+    if [ "$PRESET" = "next" ]; then
+      app_source="$workspace/${DIRECTORY%/.next/standalone}"
+      entry_dir=$(dirname "$entry")
+      if [ -d "$app_source/.next/static" ]; then
+        mkdir -p "$entry_dir/.next"
+        cp -R "$app_source/.next/static" "$entry_dir/.next/static"
+        echo "bundled .next/static"
+      else
+        echo "::warning::No .next/static at '$app_source'; the site will render unstyled." >&2
+      fi
+      if [ -d "$app_source/public" ]; then
+        cp -R "$app_source/public" "$entry_dir/public"
+        echo "bundled public/"
+      fi
+    fi
+
     # `exec` so the server replaces the shell and receives Lambda's signals directly.
     printf '#!/bin/sh\nset -e\nexec node %s\n' "$entry" > run.sh
     chmod +x run.sh
