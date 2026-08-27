@@ -129,7 +129,10 @@ print(json.dumps(body))
 released=$(api "${API_URL}/v1/deploy/release" "$body")
 
 deployment_id=$(echo "$released" | python3 -c 'import sys,json;print(json.load(sys.stdin)["deployment_id"])')
-deploy_url=$(echo "$released" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("url",""))')
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+echo "release queued; waiting for deployment ${deployment_id}"
+terminal=$(DEPLOYMENT_ID="$deployment_id" "$script_dir/wait-for-deployment.sh")
+deploy_url=$(echo "$terminal" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("url") or "")')
 
 {
   echo "deployment-id=$deployment_id"
@@ -153,4 +156,4 @@ deploy_url=$(echo "$released" | python3 -c 'import sys,json;print(json.load(sys.
   true
 } >> "$GITHUB_STEP_SUMMARY"
 
-echo "released $deployment_id"
+echo "deployed $deployment_id"
