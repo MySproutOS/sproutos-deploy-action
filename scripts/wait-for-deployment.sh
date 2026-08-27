@@ -42,7 +42,7 @@ while true; do
 import json, sys
 
 deployment = json.load(sys.stdin)
-reason = deployment.get("failure_reason") or f"Deployment ended as {deployment['status']}."
+reason = deployment.get("failure_reason") or "Deployment ended as {}.".format(deployment["status"])
 
 def command_value(value):
     return str(value).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
