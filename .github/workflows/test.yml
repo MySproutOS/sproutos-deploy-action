@@ -31,6 +31,7 @@ jobs:
           mkdir -p custom-out
           PRESET=static DIRECTORY=custom-out ./scripts/resolve-preset.sh
           grep -q 'directory=custom-out' "$GITHUB_OUTPUT"
+          grep -q 'custom-out:' "$GITHUB_OUTPUT"
 
           # An unknown preset is refused rather than guessed at.
           : > "$GITHUB_OUTPUT"
