@@ -10,6 +10,11 @@ jobs:
       - name: shellcheck
         run: shellcheck scripts/*.sh
 
+      - name: deployment action behavior
+        run: |
+          bash scripts/authenticate.test.sh
+          bash scripts/wait-for-deployment.test.sh
+
       # The preset resolver is the one piece with real branching, and it is pure: a name and a
       # directory in, a decision out. Exercised directly rather than through a whole deployment.
       - name: preset resolution
