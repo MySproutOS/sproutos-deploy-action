@@ -27,7 +27,7 @@ inputs:
     default: ""
   project:
     description: >-
-      The SproutOS project slug. Defaults to the repository name.
+      The SproutOS project slug. Optional when the repository has exactly one deployable project.
 
       **Required when the repository holds more than one project** — a monorepo deploying a web app
       and an API separately, or any repository whose projects sit under a group. The platform
@@ -128,10 +128,10 @@ runs:
         # missing has to name the fix, which `authenticate.sh` does.
         ACTIONS_ID_TOKEN_REQUEST_URL: ${{ env.ACTIONS_ID_TOKEN_REQUEST_URL }}
         ACTIONS_ID_TOKEN_REQUEST_TOKEN: ${{ env.ACTIONS_ID_TOKEN_REQUEST_TOKEN }}
-        # Which project in this repository. The token is minted for it, and every later call reads
-        # the project from the token — so naming it here is what stops a monorepo's API deploy
-        # landing on its website.
-        PROJECT: ${{ inputs.project || github.event.repository.name }}
+        # Preserve omission here. The API selects the only deployable project or refuses an
+        # ambiguous repository; substituting the repository name would silently select a same-slug
+        # child and bypass that safeguard.
+        PROJECT: ${{ inputs.project }}
       run: ${{ github.action_path }}/scripts/authenticate.sh
 
     - name: Package

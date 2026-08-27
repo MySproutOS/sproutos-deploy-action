@@ -22,6 +22,9 @@ a build in a container you cannot see, and does not need a Dockerfile — GitHub
 well, and your workflow already knows how yours works.
 
 What this action does is collect the output, upload it, and ask SproutOS to release it.
+The release step waits for the platform to finish publishing. A migration or publication error
+fails the workflow and prints the recorded failure reason and migrator output; the action never
+retries a migration.
 
 ## Presets
 
