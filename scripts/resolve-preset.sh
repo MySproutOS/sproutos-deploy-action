@@ -61,7 +61,14 @@ static_paths="${STATIC_PATHS:-}"
 if [ "$static_paths" = "none" ]; then
   static_paths=""
 elif [ -z "$static_paths" ]; then
-  static_paths="$static_default"
+  if [ "$PRESET" = "static" ]; then
+    # For a static app the build directory is the asset tree. An explicit `directory` override
+    # therefore has to move both; otherwise the package step looks for the preset's literal
+    # `dist/`, silently publishes no archive, and the platform correctly refuses the release.
+    static_paths="${directory}:"
+  else
+    static_paths="$static_default"
+  fi
 fi
 
 # Warn rather than fail on a source that is not there. A `public/` directory is optional in a
