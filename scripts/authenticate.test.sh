@@ -51,5 +51,5 @@ python3 -c 'import json,sys; assert "project" not in json.load(open(sys.argv[1])
 authenticate "web-app"
 python3 -c 'import json,sys; assert json.load(open(sys.argv[1]))["project"] == "web-app"' "$test_dir/payload"
 
-grep -Fq 'PROJECT: ${{ inputs.project }}' "$script_dir/../action.yml"
+grep -Fq "PROJECT: \${{ inputs.project }}" "$script_dir/../action.yml"
 echo "authenticate tests passed"
