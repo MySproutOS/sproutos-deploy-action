@@ -51,5 +51,18 @@ python3 -c 'import json,sys; assert "project" not in json.load(open(sys.argv[1])
 authenticate "web-app"
 python3 -c 'import json,sys; assert json.load(open(sys.argv[1]))["project"] == "web-app"' "$test_dir/payload"
 
+supplied_log=$(
+  GITHUB_OUTPUT="$test_dir/output" SUPPLIED_TOKEN="fallback-canary-token" \
+    "$script_dir/authenticate.sh"
+)
+printf '%s\n' "$supplied_log" | grep -Fxq '::add-mask::fallback-canary-token'
+grep -Fxq 'token=fallback-canary-token' "$test_dir/output"
+if GITHUB_OUTPUT="$test_dir/output" SUPPLIED_TOKEN=$'unsafe\nvalue' \
+  "$script_dir/authenticate.sh" >/dev/null 2>"$test_dir/unsafe.err"; then
+  echo "supplied token with an output-injection newline was accepted" >&2
+  exit 1
+fi
+grep -Fq 'contains a line break' "$test_dir/unsafe.err"
+
 grep -Fq "PROJECT: \${{ inputs.project }}" "$script_dir/../action.yml"
 echo "authenticate tests passed"

@@ -16,8 +16,8 @@ branding:
 inputs:
   preset:
     description: >-
-      What was built: next, hono, android, or static. Decides which files are collected and how the
-      platform runs them.
+      What was built: next, hono, web, android, or static. Decides which files are collected and
+      how the platform runs them. `web` is a generic executable bundle and is not an alias for Hono.
     required: true
   directory:
     description: >-
@@ -96,14 +96,27 @@ inputs:
       secret that cannot leak because it is never stored. Set it only where OIDC is unavailable.
     required: false
     default: ""
+  version-code:
+    description: >-
+      Android manifest versionCode. Optional when the Gradle output directory contains one
+      unambiguous output-metadata.json; required for a direct APK path.
+    required: false
+    default: ""
+  timeout-seconds:
+    description: How long to wait for the deployment to become ready, from 1 through 3600 seconds.
+    required: false
+    default: "1200"
 
 outputs:
   url:
     description: Where the deployment is reachable.
-    value: ${{ steps.release.outputs.url }}
+    value: ${{ steps.deploy.outputs.url }}
   deployment-id:
     description: The SproutOS deployment id, for polling or rollback.
-    value: ${{ steps.release.outputs.deployment-id }}
+    value: ${{ steps.deploy.outputs.deployment-id }}
+  digest:
+    description: SHA-256 digest of the exact primary artifact SproutOS received.
+    value: ${{ steps.deploy.outputs.digest }}
 
 runs:
   using: composite
@@ -134,40 +147,25 @@ runs:
         PROJECT: ${{ inputs.project }}
       run: ${{ github.action_path }}/scripts/authenticate.sh
 
-    - name: Package
-      id: package
+    - name: Install the pinned SproutOS CLI
       shell: bash
       env:
+        # The token is ephemeral and is used only by `gh attestation verify` to read public
+        # provenance. It is not a SproutOS/customer credential and is never persisted.
+        GH_TOKEN: ${{ github.token }}
+      run: ${{ github.action_path }}/scripts/install-cli.sh
+
+    - name: Package, upload, release, and wait
+      id: deploy
+      shell: bash
+      env:
+        API_URL: ${{ inputs.api-url }}
+        # Dedicated to deploy. The CLI will not treat it as a general API key.
+        SPROUTOS_DEPLOY_TOKEN: ${{ steps.auth.outputs.token }}
         DIRECTORY: ${{ steps.preset.outputs.directory }}
         PRESET: ${{ steps.preset.outputs.preset }}
-      run: ${{ github.action_path }}/scripts/package.sh
-
-    - name: Package the migrator
-      id: migration
-      shell: bash
-      env:
-        MIGRATION_DIRECTORY: ${{ inputs.migration-directory }}
-      run: ${{ github.action_path }}/scripts/package-migration.sh
-
-    - name: Package the static assets
-      id: static
-      shell: bash
-      env:
-        STATIC_PATHS: ${{ steps.preset.outputs.static-paths }}
-      run: ${{ github.action_path }}/scripts/package-static.sh
-
-    - name: Upload and release
-      id: release
-      shell: bash
-      env:
-        STATIC_ARCHIVE: ${{ steps.static.outputs.static-archive }}
-        STATIC_DIGEST: ${{ steps.static.outputs.static-digest }}
-        API_URL: ${{ inputs.api-url }}
-        SPROUTOS_TOKEN: ${{ steps.auth.outputs.token }}
-        ARCHIVE: ${{ steps.package.outputs.archive }}
-        DIGEST: ${{ steps.package.outputs.digest }}
-        PRESET: ${{ steps.preset.outputs.preset }}
-        PROJECT: ${{ inputs.project || github.event.repository.name }}
+        # Preserve omission. Repository ambiguity is resolved or refused by the platform.
+        PROJECT: ${{ inputs.project }}
         ENVIRONMENT: ${{ inputs.environment }}
         COMMIT: ${{ github.sha }}
         REF: ${{ github.ref_name }}
@@ -176,7 +174,9 @@ runs:
         MESSAGE: ${{ github.event.head_commit.message }}
         RUNTIME: ${{ inputs.runtime }}
         HANDLER: ${{ inputs.handler }}
-        MIGRATION_ARCHIVE: ${{ steps.migration.outputs.migration-archive }}
-        MIGRATION_DIGEST: ${{ steps.migration.outputs.migration-digest }}
+        MIGRATION_DIRECTORY: ${{ inputs.migration-directory }}
         MIGRATION_HANDLER: ${{ inputs.migration-handler }}
-      run: ${{ github.action_path }}/scripts/release.sh
+        STATIC_PATHS: ${{ steps.preset.outputs.static-paths }}
+        VERSION_CODE: ${{ inputs.version-code }}
+        TIMEOUT_SECONDS: ${{ inputs.timeout-seconds }}
+      run: ${{ github.action_path }}/scripts/deploy.sh

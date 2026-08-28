@@ -9,9 +9,25 @@
 # somebody else's repository cannot deploy this project.
 set -euo pipefail
 
+emit_token() {
+  local value=$1
+  if [ -z "$value" ]; then
+    echo "::error::SproutOS returned an empty deploy token." >&2
+    exit 1
+  fi
+  case "$value" in
+    *$'\n'*|*$'\r'*)
+      echo "::error::The deploy token contains a line break and cannot be written safely." >&2
+      exit 1
+      ;;
+  esac
+  echo "::add-mask::$value"
+  printf 'token=%s\n' "$value" >> "$GITHUB_OUTPUT"
+}
+
 if [ -n "${SUPPLIED_TOKEN:-}" ]; then
   echo "::warning::Using a supplied token. GitHub OIDC needs no stored secret and is preferred."
-  echo "token=$SUPPLIED_TOKEN" >> "$GITHUB_OUTPUT"
+  emit_token "$SUPPLIED_TOKEN"
   exit 0
 fi
 
@@ -71,6 +87,5 @@ fi
 exchanged=$(printf '%s' "$body" | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')
 
 # Masked so it cannot appear in a log, including one printed by a later step's `set -x`.
-echo "::add-mask::$exchanged"
-echo "token=$exchanged" >> "$GITHUB_OUTPUT"
+emit_token "$exchanged"
 echo "authenticated with GitHub OIDC"

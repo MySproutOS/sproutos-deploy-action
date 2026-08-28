@@ -5,7 +5,7 @@ jobs:
   scripts:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: shellcheck
         run: shellcheck scripts/*.sh
@@ -13,7 +13,27 @@ jobs:
       - name: deployment action behavior
         run: |
           bash scripts/authenticate.test.sh
-          bash scripts/wait-for-deployment.test.sh
+          bash scripts/action-contract.test.sh
+          bash scripts/deploy.test.sh
+          bash scripts/install-cli.test.sh
+
+      - name: released CLI artifact and request parity
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! gh release view cli-v0.1.0 --repo MySproutOS/SproutOS >/dev/null 2>&1; then
+            echo "::error::cli-v0.1.0 is not published; released-binary parity is required before merge."
+            exit 1
+          fi
+          RUNNER_TEMP=$(mktemp -d)
+          GITHUB_PATH=$(mktemp)
+          export RUNNER_TEMP GITHUB_PATH
+          scripts/install-cli.sh
+          PATH="$(tail -n1 "$GITHUB_PATH"):$PATH"
+          export PATH
+          python3 scripts/cli-parity.test.py
 
       # The preset resolver is the one piece with real branching, and it is pure: a name and a
       # directory in, a decision out. Exercised directly rather than through a whole deployment.
@@ -21,15 +41,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          export GITHUB_OUTPUT=$(mktemp)
+          GITHUB_OUTPUT=$(mktemp)
+          export GITHUB_OUTPUT
 
           mkdir -p .next/standalone dist
-          PRESET=next DIRECTORY= ./scripts/resolve-preset.sh
+          PRESET=next DIRECTORY='' ./scripts/resolve-preset.sh
           grep -q 'directory=.next/standalone' "$GITHUB_OUTPUT"
 
           : > "$GITHUB_OUTPUT"
-          PRESET=hono DIRECTORY= ./scripts/resolve-preset.sh
+          PRESET=hono DIRECTORY='' ./scripts/resolve-preset.sh
           grep -q 'directory=dist' "$GITHUB_OUTPUT"
+
+          : > "$GITHUB_OUTPUT"
+          mkdir -p .sproutos/dist
+          PRESET=web DIRECTORY='' ./scripts/resolve-preset.sh
+          grep -q 'directory=.sproutos/dist' "$GITHUB_OUTPUT"
 
           # An override wins over the default.
           : > "$GITHUB_OUTPUT"
@@ -38,9 +64,17 @@ jobs:
           grep -q 'directory=custom-out' "$GITHUB_OUTPUT"
           grep -q 'custom-out:' "$GITHUB_OUTPUT"
 
+          # Split on the final colon so a Windows drive letter remains part of the source path.
+          : > "$GITHUB_OUTPUT"
+          windows_source='C:\build\public'
+          mkdir -p "$windows_source"
+          PRESET=next DIRECTORY=.next/standalone \
+            STATIC_PATHS="${windows_source}:assets" ./scripts/resolve-preset.sh
+          grep -Fq "${windows_source}:assets" "$GITHUB_OUTPUT"
+
           # An unknown preset is refused rather than guessed at.
           : > "$GITHUB_OUTPUT"
-          if PRESET=nonsense DIRECTORY= ./scripts/resolve-preset.sh 2>/dev/null; then
+          if PRESET=nonsense DIRECTORY='' ./scripts/resolve-preset.sh 2>/dev/null; then
             echo "unknown preset was accepted" >&2; exit 1
           fi
 
@@ -49,28 +83,45 @@ jobs:
           # error.
           : > "$GITHUB_OUTPUT"
           rm -rf .next
-          if PRESET=next DIRECTORY= ./scripts/resolve-preset.sh 2>err.txt; then
+          if PRESET=next DIRECTORY='' ./scripts/resolve-preset.sh 2>err.txt; then
             echo "missing directory was accepted" >&2; exit 1
           fi
           grep -q 'output: "standalone"' err.txt
 
           echo "all preset cases pass"
 
-      - name: archives are reproducible
+  native-released-cli:
+    name: Pinned CLI on ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+          - runner: macos-15
+            target: aarch64-apple-darwin
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+          - runner: windows-2025
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install and smoke the immutable release
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          export GITHUB_OUTPUT=$(mktemp) RUNNER_TEMP=$(mktemp -d)
-          mkdir -p tree/sub && echo hello > tree/sub/a.txt && echo world > tree/b.txt
-
-          DIRECTORY=tree PRESET=static ./scripts/package.sh
-          first=$(grep '^digest=' "$GITHUB_OUTPUT" | cut -d= -f2)
-
-          : > "$GITHUB_OUTPUT"
-          # Touched, to prove the digest follows content rather than timestamps.
-          find tree -exec touch -d '2030-01-01' {} +
-          DIRECTORY=tree PRESET=static ./scripts/package.sh
-          second=$(grep '^digest=' "$GITHUB_OUTPUT" | cut -d= -f2)
-
-          [ "$first" = "$second" ] || { echo "digest changed with mtime: $first vs $second" >&2; exit 1; }
-          echo "reproducible: ${first:0:16}…"
+          if ! gh release view cli-v0.1.0 --repo MySproutOS/SproutOS >/dev/null 2>&1; then
+            echo "::notice::cli-v0.1.0 is not published yet; native ${{ matrix.target }} proof remains a merge blocker."
+            exit 0
+          fi
+          scripts/install-cli.sh
+          binary_dir=$(tail -n1 "$GITHUB_PATH")
+          case "${{ matrix.target }}" in
+            *windows*) "$binary_dir/sprout.exe" --version | grep -Fx 'sprout 0.1.0' ;;
+            *) "$binary_dir/sprout" --version | grep -Fx 'sprout 0.1.0' ;;
+          esac
