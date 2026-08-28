@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import pathlib
@@ -244,6 +245,27 @@ def main() -> None:
             os.environ.copy(),
         )
         assert_equal_runs(wrapper, direct)
+        upload_request = next(
+            item for item in wrapper.trace if item["path"] == "/v1/deploy/upload-url"
+        )
+        release_request = next(
+            item for item in wrapper.trace if item["path"] == "/v1/deploy/release"
+        )
+        assert upload_request["json"]["preset"] == "web", upload_request
+        expected_web_contract = {
+            "preset": "web",
+            "runtime": "provided.al2023",
+            "handler": "run.sh",
+        }
+        assert {
+            key: release_request["json"].get(key) for key in expected_web_contract
+        } == expected_web_contract, release_request
+        primary_digest = upload_request["json"]["digest"].removeprefix("sha256:")
+        primary_upload = wrapper.uploads[primary_digest]
+        with zipfile.ZipFile(io.BytesIO(primary_upload)) as archive:
+            assert sorted(archive.namelist()) == ["run.sh", "server"]
+            assert archive.getinfo("run.sh").external_attr >> 16 & 0o111
+            assert archive.getinfo("server").external_attr >> 16 & 0o111
         assert inventory(temp) == before | {
             "action-output": hashlib.sha256((temp / "action-output").read_bytes()).hexdigest(),
             "summary": hashlib.sha256((temp / "summary").read_bytes()).hexdigest(),

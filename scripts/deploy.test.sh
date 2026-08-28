@@ -25,7 +25,8 @@ run_deploy() {
     API_URL="https://api.example.test" PRESET="$1" DIRECTORY="$2" \
     PROJECT="${3:-}" ENVIRONMENT="preview" TIMEOUT_SECONDS=37 \
     COMMIT="0123456789abcdef" REF="feature/test" MESSAGE=$'subject "quoted"\nbody' \
-    RUNTIME="nodejs22.x" HANDLER="run.sh" MIGRATION_DIRECTORY="${MIGRATION_DIRECTORY:-}" \
+    RUNTIME="${RUNTIME:-nodejs22.x}" HANDLER="${HANDLER:-run.sh}" \
+    MIGRATION_DIRECTORY="${MIGRATION_DIRECTORY:-}" \
     MIGRATION_HANDLER="${MIGRATION_HANDLER:-}" STATIC_PATHS="${STATIC_PATHS:-}" \
     VERSION_CODE="${VERSION_CODE:-}" "$script_dir/deploy.sh" >/dev/null
 }
@@ -54,6 +55,20 @@ grep -Fxq 'short-lived-repository-token' "$test_dir/token"
 grep -Fxq 'deployment-id=019d-test-deployment' "$test_dir/output"
 grep -Fxq 'url=https://app.example.test' "$test_dir/output"
 grep -Fxq 'digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' "$test_dir/output"
+
+# Generic executable web bundles remain their own preset. They must reach the CLI as `web` with
+# the caller's custom runtime/handler, never be relabelled as Hono or given a Node entrypoint.
+RUNTIME=provided.al2023 HANDLER=run.sh run_deploy web "$test_dir/site" "generic-web"
+python3 - "$test_dir/trace" "$test_dir/site" <<'PY'
+import pathlib, sys
+
+args = pathlib.Path(sys.argv[1]).read_bytes().split(b"\0")[:-1]
+assert args[args.index(b"--path") + 1] == sys.argv[2].encode(), args
+assert args[args.index(b"--preset") + 1] == b"web", args
+assert args[args.index(b"--runtime") + 1] == b"provided.al2023", args
+assert args[args.index(b"--handler") + 1] == b"run.sh", args
+assert b"hono" not in args, args
+PY
 
 # Omitted project stays omitted: the argument after `deploy` must be --path. This is the trace that
 # guards the multi-project repository safety boundary.
