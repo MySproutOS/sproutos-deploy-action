@@ -26,6 +26,12 @@ public:'
     default="dist"
     static_default=""
     ;;
+  # A runtime-neutral executable bundle. The directory supplies its own executable `run.sh`; the
+  # Action must not invent a Node command or label an arbitrary Go/Rust binary as Hono.
+  web)
+    default=".sproutos/dist"
+    static_default=""
+    ;;
   # An APK, not a directory of files. The platform signs it — the customer's workflow does not hold
   # a signing key, which is the whole point of SproutOS being developer of record.
   android)
@@ -38,7 +44,7 @@ public:'
     static_default="dist:"
     ;;
   *)
-    echo "::error::Unknown preset '$PRESET'. Supported: next, hono, android, static." >&2
+    echo "::error::Unknown preset '$PRESET'. Supported: next, hono, web, android, static." >&2
     exit 1
     ;;
 esac
@@ -46,7 +52,15 @@ esac
 directory="${DIRECTORY:-}"
 [ -n "$directory" ] || directory="$default"
 
-if [ ! -d "$directory" ]; then
+if [ "$PRESET" = "android" ]; then
+  exists=false
+  [ -d "$directory" ] || [ -f "$directory" ] && exists=true
+else
+  exists=false
+  [ -d "$directory" ] && exists=true
+fi
+
+if [ "$exists" != true ]; then
   echo "::error::Nothing at '$directory'." >&2
   if [ "$PRESET" = "next" ] && [ "$directory" = ".next/standalone" ]; then
     echo "::error::Next.js writes this only with output: \"standalone\" in next.config. Add it, or set the 'directory' input." >&2

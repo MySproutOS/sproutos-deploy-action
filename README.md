@@ -21,7 +21,10 @@ Install and build steps are yours. SproutOS does not guess how your project is b
 a build in a container you cannot see, and does not need a Dockerfile — GitHub already runs builds
 well, and your workflow already knows how yours works.
 
-What this action does is collect the output, upload it, and ask SproutOS to release it.
+What this action does is install one pinned, checksummed and provenance-verified release of the
+`sprout` CLI, then ask that CLI to collect the output, upload it, and release it. The Action and a
+local `sprout deploy` therefore use the same packager and request contract instead of two shell and
+Rust implementations that can drift apart.
 The release step waits for the platform to finish publishing. A migration or publication error
 fails the workflow and prints the recorded failure reason and migrator output; the action never
 retries a migration.
@@ -32,6 +35,7 @@ retries a migration.
 | --- | --- | --- |
 | `next` | `.next/standalone` | Next.js with `output: "standalone"` |
 | `hono` | `dist` | A bundled Hono server |
+| `web` | `.sproutos/dist` | A generic executable bundle with its own `run.sh` |
 | `android` | `app/build/outputs/apk/release` | An unsigned APK — SproutOS signs it |
 | `static` | `dist` | Files served from CDN |
 
@@ -41,8 +45,22 @@ Set `directory` to override.
 exist, and that is the most common way this action fails — so the error names the setting rather
 than saying "not found".
 
-**`android` uploads an unsigned APK.** SproutOS holds the signing key, because SproutOS is the
-developer of record for every app it publishes. Your workflow never holds one.
+**`web` is runtime-neutral.** It does not add a Node entrypoint and is not an alias for Hono. For
+example, a static Go arm64 bundle can set `runtime: provided.al2023` and `handler: run.sh` while the
+directory contains its executable and executable `run.sh`.
+
+**`android` uploads the original unsigned APK bytes.** It is not put in a zip. SproutOS holds the
+per-app signing key, because SproutOS is the developer of record for every app it publishes. Your
+workflow never holds one. The Action reads `versionCode` from Gradle's `output-metadata.json`; set
+`version-code` when passing a direct APK or non-Gradle output.
+
+## One pinned, verified CLI
+
+The Action never downloads `latest`. Its source pins an exact CLI version, checks the selected
+platform asset against both the release manifest and `SHA256SUMS`, and verifies GitHub's artifact
+attestation against `MySproutOS/SproutOS` before executing it. An old runner without attestation
+support fails closed. Updating the CLI is an ordinary reviewed Action commit, so the same Action
+revision always runs the same deployment implementation.
 
 ## Authentication is a token nobody stores
 
@@ -117,7 +135,8 @@ The output is a **zip**, because that is what Lambda reads. Every preset uses th
 `unzip` is as available as `tar` on any machine that needs one, and two archive formats is one more
 than the platform has a reason for.
 
-Zip has no `--sort` and no way to omit timestamps, so the file list is sorted explicitly and every
-entry's mtime is pinned before archiving. The same tree then produces the same bytes and the same
-digest, and a redeploy of an unchanged build is visibly a no-op rather than looking like a new
-artifact every time.
+The pinned `sprout-core` packager sorts paths, normalizes archive metadata without changing the
+source tree, preserves safe symlinks, and verifies every digest at the upload boundary. The same
+tree produces the same bytes and digest from the Action and from local `sprout deploy`. Android is
+the exception by design: its already-built APK is uploaded byte-for-byte and its SHA-256 is over
+those raw bytes.
