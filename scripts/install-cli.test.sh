@@ -68,7 +68,7 @@ contains MySproutOS/SproutOS/.github/workflows/cli-release.yml "$@"
 contains --source-ref "$@"
 contains refs/tags/cli-v0.1.0 "$@"
 contains --source-digest "$@"
-contains 293f8cf60f3780a87b2f9bc216677e575829c20f "$@"
+contains ef758b51d85fff0ffec9dfdea233c65af7e8fdab "$@"
 contains --deny-self-hosted-runners "$@"
 EOF
 chmod +x "$test_dir/bin/"*

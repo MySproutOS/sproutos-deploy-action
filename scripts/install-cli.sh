@@ -14,7 +14,7 @@ readonly repository="MySproutOS/SproutOS"
 readonly signer_workflow="MySproutOS/SproutOS/.github/workflows/cli-release.yml"
 # Exact source revision whose CLI contract this Action wraps. Updated together with `version` after
 # the release has been built and attested; a moved/recreated tag cannot silently change it.
-readonly source_digest="293f8cf60f3780a87b2f9bc216677e575829c20f"
+readonly source_digest="ef758b51d85fff0ffec9dfdea233c65af7e8fdab"
 readonly release_base="https://github.com/${repository}/releases/download/${tag}"
 
 case "$(uname -s):$(uname -m)" in
