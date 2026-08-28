@@ -43,7 +43,7 @@ if [ "$PRESET" = "android" ]; then
   if [ -z "$version_code" ] && [ -d "$DIRECTORY" ]; then
     metadata="$DIRECTORY/output-metadata.json"
     if [ -f "$metadata" ]; then
-      version_code=$(python3 - "$metadata" <<'PY'
+      if ! version_code=$(python3 - "$metadata" <<'PY'
 import json, pathlib, sys
 
 elements = json.loads(pathlib.Path(sys.argv[1]).read_text()).get("elements", [])
@@ -51,7 +51,10 @@ codes = {element.get("versionCode") for element in elements if element.get("outp
 if len(codes) == 1 and next(iter(codes)) is not None:
     print(next(iter(codes)))
 PY
-)
+      ); then
+        echo "::error::Could not read Android versionCode from '$metadata'." >&2
+        exit 1
+      fi
     fi
   fi
   if ! [[ "$version_code" =~ ^[1-9][0-9]*$ ]]; then

@@ -8,7 +8,7 @@ permissions:
   id-token: write          # required — see below
 
 steps:
-  - uses: actions/checkout@v4
+  - uses: actions/checkout@v5
   - run: npm ci && npm run build
   - uses: MySproutOS/sproutos-deploy-action@v1
     with:
