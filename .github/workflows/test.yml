@@ -81,3 +81,39 @@ jobs:
           grep -q 'output: "standalone"' err.txt
 
           echo "all preset cases pass"
+
+  native-released-cli:
+    name: Pinned CLI on ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+          - runner: macos-15
+            target: aarch64-apple-darwin
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+          - runner: windows-2025
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install and smoke the immutable release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! gh release view cli-v0.1.0 --repo MySproutOS/SproutOS >/dev/null 2>&1; then
+            echo "::notice::cli-v0.1.0 is not published yet; native ${{ matrix.target }} proof remains a merge blocker."
+            exit 0
+          fi
+          scripts/install-cli.sh
+          binary_dir=$(tail -n1 "$GITHUB_PATH")
+          case "${{ matrix.target }}" in
+            *windows*) "$binary_dir/sprout.exe" --version | grep -Fx 'sprout 0.1.0' ;;
+            *) "$binary_dir/sprout" --version | grep -Fx 'sprout 0.1.0' ;;
+          esac
