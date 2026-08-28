@@ -11,6 +11,13 @@ set -euo pipefail
 
 if [ -n "${SUPPLIED_TOKEN:-}" ]; then
   echo "::warning::Using a supplied token. GitHub OIDC needs no stored secret and is preferred."
+  case "$SUPPLIED_TOKEN" in
+    *$'\n'*|*$'\r'*)
+      echo "::error::The supplied token contains a line break and cannot be written safely." >&2
+      exit 1
+      ;;
+  esac
+  echo "::add-mask::$SUPPLIED_TOKEN"
   echo "token=$SUPPLIED_TOKEN" >> "$GITHUB_OUTPUT"
   exit 0
 fi

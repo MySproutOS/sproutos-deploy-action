@@ -14,7 +14,7 @@ readonly repository="MySproutOS/SproutOS"
 readonly signer_workflow="MySproutOS/SproutOS/.github/workflows/cli-release.yml"
 # Exact source revision whose CLI contract this Action wraps. Updated together with `version` after
 # the release has been built and attested; a moved/recreated tag cannot silently change it.
-readonly source_digest="28579cdfcc910c3ba82547b6ee908ef79139b2ce"
+readonly source_digest="293f8cf60f3780a87b2f9bc216677e575829c20f"
 readonly release_base="https://github.com/${repository}/releases/download/${tag}"
 
 case "$(uname -s):$(uname -m)" in
@@ -31,8 +31,7 @@ esac
 
 asset="sprout-v${version}-${target}.${suffix}"
 manifest="sprout-v${version}-manifest.json"
-stage="${RUNNER_TEMP}/sprout-cli-${version}"
-mkdir -p "$stage"
+stage=$(mktemp -d "${RUNNER_TEMP%/}/sprout-cli-${version}.XXXXXX")
 
 download() {
   curl --proto '=https' --tlsv1.2 --location --fail --silent --show-error \

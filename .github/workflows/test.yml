@@ -24,8 +24,8 @@ jobs:
         run: |
           set -euo pipefail
           if ! gh release view cli-v0.1.0 --repo MySproutOS/SproutOS >/dev/null 2>&1; then
-            echo "::notice::cli-v0.1.0 is not published yet; release parity remains a merge blocker."
-            exit 0
+            echo "::error::cli-v0.1.0 is not published; released-binary parity is required before merge."
+            exit 1
           fi
           RUNNER_TEMP=$(mktemp -d)
           GITHUB_PATH=$(mktemp)
@@ -63,6 +63,14 @@ jobs:
           PRESET=static DIRECTORY=custom-out ./scripts/resolve-preset.sh
           grep -q 'directory=custom-out' "$GITHUB_OUTPUT"
           grep -q 'custom-out:' "$GITHUB_OUTPUT"
+
+          # Split on the final colon so a Windows drive letter remains part of the source path.
+          : > "$GITHUB_OUTPUT"
+          windows_source='C:\build\public'
+          mkdir -p "$windows_source"
+          PRESET=next DIRECTORY=.next/standalone \
+            STATIC_PATHS="${windows_source}:assets" ./scripts/resolve-preset.sh
+          grep -Fq "${windows_source}:assets" "$GITHUB_OUTPUT"
 
           # An unknown preset is refused rather than guessed at.
           : > "$GITHUB_OUTPUT"

@@ -91,7 +91,8 @@ fi
 kept=""
 while IFS= read -r line; do
   [ -n "$line" ] || continue
-  source="${line%%:*}"
+  source="$line"
+  case "$line" in *:*) source="${line%:*}" ;; esac
   if [ -d "$source" ]; then
     kept="${kept}${line}"$'\n'
   else

@@ -68,7 +68,7 @@ contains MySproutOS/SproutOS/.github/workflows/cli-release.yml "$@"
 contains --source-ref "$@"
 contains refs/tags/cli-v0.1.0 "$@"
 contains --source-digest "$@"
-contains 28579cdfcc910c3ba82547b6ee908ef79139b2ce "$@"
+contains 293f8cf60f3780a87b2f9bc216677e575829c20f "$@"
 contains --deny-self-hosted-runners "$@"
 EOF
 chmod +x "$test_dir/bin/"*
@@ -82,12 +82,19 @@ run_install() {
 }
 
 run_install "$test_dir/good"
-grep -Fxq "$test_dir/good/sprout-cli-0.1.0/bin" "$test_dir/good/path"
-"$test_dir/good/sprout-cli-0.1.0/bin/sprout" --version | grep -Fxq 'sprout 0.1.0'
+first_install=$(tail -n1 "$test_dir/good/path")
+"$first_install/sprout" --version | grep -Fxq 'sprout 0.1.0'
 test "$(wc -l < "$test_dir/good/gh-trace" | tr -d ' ')" -eq 3
 grep -Fq 'sprout-v0.1.0-x86_64-unknown-linux-gnu.tar.gz' "$test_dir/good/gh-trace"
 grep -Fq '/SHA256SUMS ' "$test_dir/good/gh-trace"
 grep -Fq '/sprout-v0.1.0-manifest.json ' "$test_dir/good/gh-trace"
+
+# A monorepo may invoke the composite Action more than once in one job. Each installer owns a
+# unique extraction tree, so Windows unzip never prompts to overwrite the first invocation.
+run_install "$test_dir/good"
+second_install=$(tail -n1 "$test_dir/good/path")
+[ "$first_install" != "$second_install" ]
+"$second_install/sprout" --version | grep -Fxq 'sprout 0.1.0'
 
 if TAMPER_ASSET=1 run_install "$test_dir/tampered" 2>"$test_dir/tampered.err"; then
   echo "tampered CLI archive was accepted" >&2

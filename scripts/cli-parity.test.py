@@ -10,6 +10,7 @@ import pathlib
 import subprocess
 import tempfile
 import threading
+import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
@@ -123,11 +124,16 @@ def execute(command: list[str], environment: dict[str, str]) -> tuple[State, str
             command,
             cwd=ROOT,
             env=environment,
-            check=True,
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
+        assert completed.returncode == 0, {
+            "command": command,
+            "stdout": completed.stdout,
+            "stderr": completed.stderr,
+            "trace": state.trace,
+        }
     finally:
         server.shutdown()
         server.server_close()
@@ -244,7 +250,9 @@ def main() -> None:
         }
 
         apk = temp / "app-release.apk"
-        apk.write_bytes(b"raw-unsigned-apk-bytes")
+        with zipfile.ZipFile(apk, "w") as archive:
+            archive.writestr("AndroidManifest.xml", b"manifest")
+            archive.writestr("classes.dex", b"dex")
         android_env = wrapper_environment(
             temp,
             PRESET="android",
