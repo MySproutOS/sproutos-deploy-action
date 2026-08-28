@@ -4,6 +4,7 @@ set -euo pipefail
 test_dir=$(mktemp -d "${TMPDIR:-/tmp}/sproutos-cli-install-test.XXXXXX")
 trap 'rm -rf "$test_dir"' EXIT
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+real_sha256sum=$(command -v sha256sum)
 fixture="$test_dir/fixture"
 mkdir -p "$fixture/sprout-v0.1.0-x86_64-unknown-linux-gnu"
 
@@ -71,13 +72,20 @@ contains --source-digest "$@"
 contains ef758b51d85fff0ffec9dfdea233c65af7e8fdab "$@"
 contains --deny-self-hosted-runners "$@"
 EOF
+cat > "$test_dir/bin/sha256sum" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[ "$#" -eq 1 ] && [ "$1" = --binary ]
+"$REAL_SHA256SUM" --binary
+EOF
 chmod +x "$test_dir/bin/"*
 
 run_install() {
   local runner=$1
   mkdir -p "$runner"
   : > "$runner/path"
-  FIXTURE="$fixture" GH_TRACE="$runner/gh-trace" PATH="$test_dir/bin:$PATH" \
+  FIXTURE="$fixture" GH_TRACE="$runner/gh-trace" REAL_SHA256SUM="$real_sha256sum" \
+    PATH="$test_dir/bin:$PATH" \
     RUNNER_TEMP="$runner" GITHUB_PATH="$runner/path" "$script_dir/install-cli.sh" >/dev/null
 }
 

@@ -71,11 +71,13 @@ if [ "$(printf '%s\n' "$listed" | grep -c . || true)" -ne 1 ] || [ "$listed" != 
 fi
 
 if command -v sha256sum >/dev/null 2>&1; then
-  actual=$(sha256sum "$stage/$asset" | cut -d' ' -f1)
+  # Hash stdin so GNU coreutils never prefixes the digest with `\` when the Windows runner's
+  # filename contains backslashes. Explicit binary mode also prevents MSYS text translation.
+  actual=$(sha256sum --binary < "$stage/$asset" | awk '{ print $1 }')
 else
-  actual=$(shasum -a 256 "$stage/$asset" | cut -d' ' -f1)
+  actual=$(shasum -a 256 --binary < "$stage/$asset" | awk '{ print $1 }')
 fi
-if [ "$actual" != "$expected" ]; then
+if ! [[ "$actual" =~ ^[0-9a-f]{64}$ ]] || [ "$actual" != "$expected" ]; then
   echo "::error::The downloaded SproutOS CLI checksum did not match its immutable manifest." >&2
   exit 1
 fi
