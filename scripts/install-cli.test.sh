@@ -6,29 +6,29 @@ trap 'rm -rf "$test_dir"' EXIT
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 real_sha256sum=$(command -v sha256sum)
 fixture="$test_dir/fixture"
-mkdir -p "$fixture/sprout-v0.1.0-x86_64-unknown-linux-gnu"
+mkdir -p "$fixture/sprout-v0.3.0-x86_64-unknown-linux-gnu"
 
-cat > "$fixture/sprout-v0.1.0-x86_64-unknown-linux-gnu/sprout" <<'EOF'
+cat > "$fixture/sprout-v0.3.0-x86_64-unknown-linux-gnu/sprout" <<'EOF'
 #!/usr/bin/env bash
-printf '%s\n' 'sprout 0.1.0'
+printf '%s\n' 'sprout 0.3.0'
 EOF
-chmod +x "$fixture/sprout-v0.1.0-x86_64-unknown-linux-gnu/sprout"
-tar -C "$fixture" -czf "$fixture/sprout-v0.1.0-x86_64-unknown-linux-gnu.tar.gz" \
-  sprout-v0.1.0-x86_64-unknown-linux-gnu
-digest=$(sha256sum "$fixture/sprout-v0.1.0-x86_64-unknown-linux-gnu.tar.gz" | cut -d' ' -f1)
-size=$(wc -c < "$fixture/sprout-v0.1.0-x86_64-unknown-linux-gnu.tar.gz" | tr -d ' ')
-printf '%s  %s\n' "$digest" 'sprout-v0.1.0-x86_64-unknown-linux-gnu.tar.gz' > "$fixture/SHA256SUMS"
-python3 - "$fixture/sprout-v0.1.0-manifest.json" "$digest" "$size" <<'PY'
+chmod +x "$fixture/sprout-v0.3.0-x86_64-unknown-linux-gnu/sprout"
+tar -C "$fixture" -czf "$fixture/sprout-v0.3.0-x86_64-unknown-linux-gnu.tar.gz" \
+  sprout-v0.3.0-x86_64-unknown-linux-gnu
+digest=$(sha256sum "$fixture/sprout-v0.3.0-x86_64-unknown-linux-gnu.tar.gz" | cut -d' ' -f1)
+size=$(wc -c < "$fixture/sprout-v0.3.0-x86_64-unknown-linux-gnu.tar.gz" | tr -d ' ')
+printf '%s  %s\n' "$digest" 'sprout-v0.3.0-x86_64-unknown-linux-gnu.tar.gz' > "$fixture/SHA256SUMS"
+python3 - "$fixture/sprout-v0.3.0-manifest.json" "$digest" "$size" <<'PY'
 import json, pathlib, sys
 pathlib.Path(sys.argv[1]).write_text(json.dumps({
     "schemaVersion": 1,
-    "version": "0.1.0",
-    "tag": "cli-v0.1.0",
+    "version": "0.3.0",
+    "tag": "cli-v0.3.0",
     "assets": [{
         "target": "x86_64-unknown-linux-gnu",
         "os": "linux",
         "arch": "x86_64",
-        "url": "https://github.com/MySproutOS/SproutOS/releases/download/cli-v0.1.0/sprout-v0.1.0-x86_64-unknown-linux-gnu.tar.gz",
+        "url": "https://github.com/MySproutOS/SproutOS/releases/download/cli-v0.3.0/sprout-v0.3.0-x86_64-unknown-linux-gnu.tar.gz",
         "sha256": sys.argv[2],
         "sizeBytes": int(sys.argv[3]),
     }],
@@ -67,9 +67,9 @@ contains MySproutOS/SproutOS "$@"
 contains --signer-workflow "$@"
 contains MySproutOS/SproutOS/.github/workflows/cli-release.yml "$@"
 contains --source-ref "$@"
-contains refs/tags/cli-v0.1.0 "$@"
+contains refs/tags/cli-v0.3.0 "$@"
 contains --source-digest "$@"
-contains ef758b51d85fff0ffec9dfdea233c65af7e8fdab "$@"
+contains a90bd7c56c594479c1896bb5a054e07434f59980 "$@"
 contains --deny-self-hosted-runners "$@"
 EOF
 cat > "$test_dir/bin/sha256sum" <<'EOF'
@@ -91,18 +91,18 @@ run_install() {
 
 run_install "$test_dir/good"
 first_install=$(tail -n1 "$test_dir/good/path")
-"$first_install/sprout" --version | grep -Fxq 'sprout 0.1.0'
+"$first_install/sprout" --version | grep -Fxq 'sprout 0.3.0'
 test "$(wc -l < "$test_dir/good/gh-trace" | tr -d ' ')" -eq 3
-grep -Fq 'sprout-v0.1.0-x86_64-unknown-linux-gnu.tar.gz' "$test_dir/good/gh-trace"
+grep -Fq 'sprout-v0.3.0-x86_64-unknown-linux-gnu.tar.gz' "$test_dir/good/gh-trace"
 grep -Fq '/SHA256SUMS ' "$test_dir/good/gh-trace"
-grep -Fq '/sprout-v0.1.0-manifest.json ' "$test_dir/good/gh-trace"
+grep -Fq '/sprout-v0.3.0-manifest.json ' "$test_dir/good/gh-trace"
 
 # A monorepo may invoke the composite Action more than once in one job. Each installer owns a
 # unique extraction tree, so Windows unzip never prompts to overwrite the first invocation.
 run_install "$test_dir/good"
 second_install=$(tail -n1 "$test_dir/good/path")
 [ "$first_install" != "$second_install" ]
-"$second_install/sprout" --version | grep -Fxq 'sprout 0.1.0'
+"$second_install/sprout" --version | grep -Fxq 'sprout 0.3.0'
 
 if TAMPER_ASSET=1 run_install "$test_dir/tampered" 2>"$test_dir/tampered.err"; then
   echo "tampered CLI archive was accepted" >&2

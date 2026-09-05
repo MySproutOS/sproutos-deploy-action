@@ -70,6 +70,18 @@ assert args[args.index(b"--handler") + 1] == b"run.sh", args
 assert b"hono" not in args, args
 PY
 
+# Handler-based functions forward their runtime and entry point without being relabelled as a web
+# server preset.
+RUNTIME=python3.14 HANDLER=app.handler run_deploy function "$test_dir/site" "worker"
+python3 - "$test_dir/trace" <<'PY'
+import pathlib, sys
+
+args = pathlib.Path(sys.argv[1]).read_bytes().split(b"\0")[:-1]
+assert args[args.index(b"--preset") + 1] == b"function", args
+assert args[args.index(b"--runtime") + 1] == b"python3.14", args
+assert args[args.index(b"--handler") + 1] == b"app.handler", args
+PY
+
 # Omitted project stays omitted: the argument after `deploy` must be --path. This is the trace that
 # guards the multi-project repository safety boundary.
 unset STATIC_PATHS MIGRATION_DIRECTORY MIGRATION_HANDLER
