@@ -16,6 +16,14 @@ JSON
 EOF
 chmod +x "$test_dir/sprout"
 
+cat > "$test_dir/sprout-failure" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' '{"schema_version":1,"ok":false,"error":{"code":"packaging_rejected","message":"web requires run.sh","retryable":false}}'
+exit 23
+EOF
+chmod +x "$test_dir/sprout-failure"
+
 run_deploy() {
   : > "$test_dir/output"
   : > "$test_dir/summary"
@@ -55,6 +63,20 @@ grep -Fxq 'short-lived-repository-token' "$test_dir/token"
 grep -Fxq 'deployment-id=019d-test-deployment' "$test_dir/output"
 grep -Fxq 'url=https://app.example.test' "$test_dir/output"
 grep -Fxq 'digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' "$test_dir/output"
+
+# A real CLI failure is structured JSON on stdout. The wrapper must surface that safe diagnostic
+# and preserve its exit status instead of failing silently at the command substitution.
+mv "$test_dir/sprout" "$test_dir/sprout-success"
+mv "$test_dir/sprout-failure" "$test_dir/sprout"
+set +e
+failure_output=$(run_deploy web "$test_dir/site" "generic-web" 2>&1)
+failure_status=$?
+set -e
+test "$failure_status" -eq 23
+printf '%s\n' "$failure_output" | grep -Fq '"code":"packaging_rejected"'
+printf '%s\n' "$failure_output" | grep -Fq '"message":"web requires run.sh"'
+mv "$test_dir/sprout" "$test_dir/sprout-failure"
+mv "$test_dir/sprout-success" "$test_dir/sprout"
 
 # Generic executable web bundles remain their own preset. They must reach the CLI as `web` with
 # the caller's custom runtime/handler, never be relabelled as Hono or given a Node entrypoint.
