@@ -67,7 +67,16 @@ fi
 # JSON stdout is captured exactly once. Progress stays on stderr by the CLI contract, and the
 # repository deploy token is available only to this process through its dedicated environment
 # variable; it is never accepted as a general SPROUTOS_TOKEN or written to disk.
+set +e
 result=$("${command[@]}")
+command_status=$?
+set -e
+if [ "$command_status" -ne 0 ]; then
+  # JSON mode writes the actionable, redacted error document to stdout. Preserve it in the Action
+  # log instead of letting `set -e` discard the captured output at the assignment boundary.
+  [ -z "$result" ] || printf '%s\n' "$result" >&2
+  exit "$command_status"
+fi
 deployment_id=$(python3 -c '
 import json, sys
 document = json.load(sys.stdin)
