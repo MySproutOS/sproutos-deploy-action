@@ -32,6 +32,11 @@ public:'
     default=".sproutos/dist"
     static_default=""
     ;;
+  # A raw Lambda ZIP. The caller supplies its runtime and handler.
+  function)
+    default="dist"
+    static_default=""
+    ;;
   # An APK, not a directory of files. The platform signs it — the customer's workflow does not hold
   # a signing key, which is the whole point of SproutOS being developer of record.
   android)
@@ -44,7 +49,7 @@ public:'
     static_default="dist:"
     ;;
   *)
-    echo "::error::Unknown preset '$PRESET'. Supported: next, hono, web, android, static." >&2
+    echo "::error::Unknown preset '$PRESET'. Supported: next, hono, web, function, android, static." >&2
     exit 1
     ;;
 esac

@@ -13,6 +13,8 @@ steps:
   - uses: MySproutOS/sproutos-deploy-action@v1
     with:
       preset: next
+      runtime: nodejs24.x
+      handler: run.sh
 ```
 
 ## You build; this uploads
@@ -36,6 +38,7 @@ retries a migration.
 | `next` | `.next/standalone` | Next.js with `output: "standalone"` |
 | `hono` | `dist` | A bundled Hono server |
 | `web` | `.sproutos/dist` | A generic executable bundle with its own `run.sh` |
+| `function` | `dist` | A handler-based Node.js, Python, Java, .NET, Ruby, or custom Lambda package |
 | `android` | `app/build/outputs/apk/release` | An unsigned APK — SproutOS signs it |
 | `static` | `dist` | Files served from CDN |
 
@@ -46,8 +49,12 @@ exist, and that is the most common way this action fails — so the error names 
 than saying "not found".
 
 **`web` is runtime-neutral.** It does not add a Node entrypoint and is not an alias for Hono. For
-example, a static Go arm64 bundle can set `runtime: provided.al2023` and `handler: run.sh` while the
-directory contains its executable and executable `run.sh`.
+example, a static Go arm64 bundle can set `runtime: provided.al2023` and `handler: bootstrap` while
+the directory contains its executable and executable `run.sh`.
+
+**`function` packages an existing Lambda handler without adding a web adapter.** Set both
+`runtime` and `handler`; for example, `python3.14` with `app.handler`. The build step remains
+responsible for producing dependencies for SproutOS's arm64 Lambda environment.
 
 **`android` uploads the original unsigned APK bytes.** It is not put in a zip. SproutOS holds the
 per-app signing key, because SproutOS is the developer of record for every app it publishes. Your

@@ -16,7 +16,7 @@ branding:
 inputs:
   preset:
     description: >-
-      What was built: next, hono, web, android, or static. Decides which files are collected and
+      What was built: next, hono, web, function, android, or static. Decides which files are collected and
       how the platform runs them. `web` is a generic executable bundle and is not an alias for Hono.
     required: true
   directory:
@@ -45,7 +45,8 @@ inputs:
     default: https://api.sproutos.me
   runtime:
     description: >-
-      The Lambda runtime to publish on, e.g. `nodejs22.x`. Defaults to the preset's, so most callers
+      The Lambda runtime to publish on, e.g. `nodejs24.x`. Defaults to the project's matching
+      runtime setting, then the preset default, so most callers
       do not set it. Set it to pin a version rather than follow the platform default.
     required: false
     default: ""

@@ -8,13 +8,13 @@ set -euo pipefail
 # Updating this version is a reviewable Action change. Never resolve "latest": an Action run must
 # not execute different platform code because a release appeared between two otherwise identical
 # workflow runs.
-readonly version="0.1.0"
+readonly version="0.3.0"
 readonly tag="cli-v${version}"
 readonly repository="MySproutOS/SproutOS"
 readonly signer_workflow="MySproutOS/SproutOS/.github/workflows/cli-release.yml"
 # Exact source revision whose CLI contract this Action wraps. Updated together with `version` after
 # the release has been built and attested; a moved/recreated tag cannot silently change it.
-readonly source_digest="ef758b51d85fff0ffec9dfdea233c65af7e8fdab"
+readonly source_digest="a90bd7c56c594479c1896bb5a054e07434f59980"
 readonly release_base="https://github.com/${repository}/releases/download/${tag}"
 
 case "$(uname -s):$(uname -m)" in
@@ -49,9 +49,9 @@ import json, pathlib, sys
 
 document = json.loads(pathlib.Path(sys.argv[1]).read_text())
 assert document.get("schemaVersion") == 1, "unsupported CLI manifest schema"
-assert document.get("version") == "0.1.0", "CLI manifest version mismatch"
-assert document.get("tag") == "cli-v0.1.0", "CLI manifest tag mismatch"
-expected_url = "https://github.com/MySproutOS/SproutOS/releases/download/cli-v0.1.0/" + sys.argv[3]
+assert document.get("version") == "0.3.0", "CLI manifest version mismatch"
+assert document.get("tag") == "cli-v0.3.0", "CLI manifest tag mismatch"
+expected_url = "https://github.com/MySproutOS/SproutOS/releases/download/cli-v0.3.0/" + sys.argv[3]
 matches = [entry for entry in document.get("assets", [])
            if entry.get("target") == sys.argv[2] and entry.get("url") == expected_url]
 assert len(matches) == 1, "CLI manifest does not contain exactly one matching asset"

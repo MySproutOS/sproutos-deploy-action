@@ -23,8 +23,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if ! gh release view cli-v0.1.0 --repo MySproutOS/SproutOS >/dev/null 2>&1; then
-            echo "::error::cli-v0.1.0 is not published; released-binary parity is required before merge."
+          if ! gh release view cli-v0.3.0 --repo MySproutOS/SproutOS >/dev/null 2>&1; then
+            echo "::error::cli-v0.3.0 is not published; released-binary parity is required before merge."
             exit 1
           fi
           RUNNER_TEMP=$(mktemp -d)
@@ -115,13 +115,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if ! gh release view cli-v0.1.0 --repo MySproutOS/SproutOS >/dev/null 2>&1; then
-            echo "::notice::cli-v0.1.0 is not published yet; native ${{ matrix.target }} proof remains a merge blocker."
+          if ! gh release view cli-v0.3.0 --repo MySproutOS/SproutOS >/dev/null 2>&1; then
+            echo "::notice::cli-v0.3.0 is not published yet; native ${{ matrix.target }} proof remains a merge blocker."
             exit 0
           fi
           scripts/install-cli.sh
           binary_dir=$(tail -n1 "$GITHUB_PATH")
           case "${{ matrix.target }}" in
-            *windows*) "$binary_dir/sprout.exe" --version | grep -Fx 'sprout 0.1.0' ;;
-            *) "$binary_dir/sprout" --version | grep -Fx 'sprout 0.1.0' ;;
+            *windows*) "$binary_dir/sprout.exe" --version | grep -Fx 'sprout 0.3.0' ;;
+            *) "$binary_dir/sprout" --version | grep -Fx 'sprout 0.3.0' ;;
           esac

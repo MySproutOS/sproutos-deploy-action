@@ -263,7 +263,8 @@ def main() -> None:
         primary_digest = upload_request["json"]["digest"].removeprefix("sha256:")
         primary_upload = wrapper.uploads[primary_digest]
         with zipfile.ZipFile(io.BytesIO(primary_upload)) as archive:
-            assert sorted(archive.namelist()) == ["run.sh", "server"]
+            assert sorted(archive.namelist()) == ["bootstrap", "run.sh", "server"]
+            assert archive.getinfo("bootstrap").external_attr >> 16 & 0o111
             assert archive.getinfo("run.sh").external_attr >> 16 & 0o111
             assert archive.getinfo("server").external_attr >> 16 & 0o111
         assert inventory(temp) == before | {
